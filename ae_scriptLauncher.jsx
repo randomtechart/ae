@@ -115,12 +115,27 @@ win.preferredSize.height = 600;
                     fileItem.isScript = true;
                 }
             } else {
-                // Add folder node
-                var folderItem = parentNode.add("node", key);
-                folderItem.expanded = level < 2; // Auto-expand first 2 levels
+                // Add folder node - use just the folder name, not full path
+                var folderName = key.split(/[\/\\]/).pop() || key;
+                var folderItem = parentNode.add("node", folderName);
                 
                 // Recursively add contents
                 populateTree(data[key], folderItem, level + 1);
+            }
+        }
+    }
+    
+    // Function to expand all nodes recursively
+    function expandAllNodes(node) {
+        if (node.type === "node") {
+            node.expanded = true;
+            for (var i = 0; i < node.items.length; i++) {
+                expandAllNodes(node.items[i]);
+            }
+        } else if (node.items) {
+            // Handle tree root
+            for (var i = 0; i < node.items.length; i++) {
+                expandAllNodes(node.items[i]);
             }
         }
     }
@@ -158,11 +173,6 @@ win.preferredSize.height = 600;
         // Clear existing tree
         tree.removeAll();
         
-        // Show progress
-        var progressWin = new Window("dialog", "Scanning...");
-        progressWin.add("statictext", undefined, "Scanning for JSX files...");
-        progressWin.show();
-        
         try {
             // Scan the folder
             scriptData = scanFolder(selectedFolder, selectedFolder);
@@ -170,13 +180,13 @@ win.preferredSize.height = 600;
             // Populate tree
             populateTree(scriptData, tree);
             
-            progressWin.close();
+            // Expand all nodes
+            expandAllNodes(tree);
             
             if (tree.items.length === 0) {
                 alert("No JSX files found in the selected folder.");
             }
         } catch (error) {
-            progressWin.close();
             alert("Error scanning folder: " + error.toString());
         }
     };
