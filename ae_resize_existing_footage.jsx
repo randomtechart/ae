@@ -100,7 +100,6 @@ function addFootageToRenderQueue(footageItems) {
             var originalFolder = originalFile.parent;
             var fileName = originalFile.displayName;
             var nameWithoutExt = fileName.replace(/\.[^/.]+$/, "");
-            var extension = fileName.substring(fileName.lastIndexOf('.'));
             
             // Create output folder
             var outputFolder = new Folder(originalFolder.fsName + "/80");
@@ -108,15 +107,29 @@ function addFootageToRenderQueue(footageItems) {
                 outputFolder.create();
             }
             
-            // Set output file
-            var outputFile = new File(outputFolder.fsName + "/" + nameWithoutExt + "_80" + extension);
+            // Set output file for PNG sequence (using [#####] for frame numbering)
+            var outputFile = new File(outputFolder.fsName + "/" + nameWithoutExt + "_80_[#####].png");
             
             // Configure render settings
             var outputModule = renderItem.outputModule(1);
             outputModule.file = outputFile;
             
-            // Set resize to 80%
-            outputModule.applyTemplate("Lossless");
+            // Set output format to PNG sequence with alpha and no compression
+            outputModule.applyTemplate("PNG Sequence");
+            outputModule.format = "PNG Sequence";
+            outputModule.channels = OutputModuleChannels.RGBA;
+            outputModule.depth = OutputModuleDepth.DEPTH_8;
+            
+            // Set PNG options for no compression
+            var pngOptions = outputModule.formatOptions;
+            if (pngOptions) {
+                // PNG compression level (0 = no compression, 9 = maximum compression)
+                try {
+                    pngOptions.compression = 0;
+                } catch (e) {
+                    // Fallback if compression property doesn't exist
+                }
+            }
             
             // Access render settings to set resize
             var renderSettings = renderItem.outputModule(1);
@@ -167,17 +180,29 @@ function relinkFootageAndUpdateComps(renderInfo) {
         var info = renderInfo[i];
         
         try {
-            // Check if output file exists
-            if (!info.outputFile.exists) {
-                alert("Rendered file not found: " + info.outputFile.fsName);
+            // Check if output folder exists and has PNG files
+            var outputFolder = new Folder(info.outputFile.parent.fsName);
+            if (!outputFolder.exists) {
+                alert("Output folder not found: " + outputFolder.fsName);
                 continue;
             }
+            
+            // For PNG sequences, we need to find the first frame to use as replacement
+            var pngFiles = outputFolder.getFiles("*.png");
+            if (pngFiles.length === 0) {
+                alert("No PNG files found in: " + outputFolder.fsName);
+                continue;
+            }
+            
+            // Sort files to get the first frame
+            pngFiles.sort();
+            var firstFrame = pngFiles[0];
             
             // Store references to compositions using this footage
             var compsUsingFootage = findCompositionsUsingFootage(info.originalFootage);
             
-            // Replace footage source
-            info.originalFootage.replace(info.outputFile);
+            // Replace footage source with PNG sequence
+            info.originalFootage.replace(firstFrame);
             
             // Update all compositions that use this footage
             updateCompositionsScale(compsUsingFootage, info.originalFootage, 125);
