@@ -3,7 +3,7 @@
 
 (function() {
 
-```
+
 // Check if project is open
 if (!app.project) {
     alert("No project is open!");
@@ -14,11 +14,30 @@ if (!app.project) {
 var layersWithoutMarkers = [];
 var layersWithCompressionMarkers = [];
 
-// Function to check if a layer is footage (not shape or solid)
-function isFootageLayer(layer) {
-    // Check if it's NOT a shape layer or solid layer
-    return !(layer instanceof ShapeLayer) && 
-           !(layer instanceof AVLayer && layer.source instanceof SolidSource);
+// Function to check if a layer has an image source (excludes solids, nulls, adjustment layers)
+function isImageLayer(layer) {
+    // Must be an AVLayer with a valid source
+    if (!(layer instanceof AVLayer) || !layer.source) {
+        return false;
+    }
+    
+    // Exclude solid sources
+    if (layer.source instanceof SolidSource) {
+        return false;
+    }
+    
+    // Exclude null objects (they don't have a source)
+    if (layer.nullLayer) {
+        return false;
+    }
+    
+    // Exclude adjustment layers
+    if (layer.adjustmentLayer) {
+        return false;
+    }
+    
+    // Must be FootageItem (images, video files)
+    return layer.source instanceof FootageItem;
 }
 
 // Function to check if layer has any markers
@@ -30,20 +49,30 @@ function hasMarkers(layer) {
     }
 }
 
-// Function to check if layer has compression marker
-function hasCompressionMarker(layer) {
+// Function to get compression marker details
+function getCompressionMarkerDetails(layer) {
+    var markerDetails = [];
     try {
         var markerProp = layer.property("Marker");
         for (var i = 1; i <= markerProp.numKeys; i++) {
             var markerValue = markerProp.keyValue(i);
             if (markerValue.comment && markerValue.comment.toLowerCase().indexOf("compression") !== -1) {
-                return true;
+                var markerTime = markerProp.keyTime(i);
+                markerDetails.push({
+                    time: markerTime,
+                    comment: markerValue.comment,
+                    duration: markerValue.duration || 0,
+                    chapter: markerValue.chapter || "",
+                    url: markerValue.url || "",
+                    frameTarget: markerValue.frameTarget || "",
+                    cuePointName: markerValue.cuePointName || ""
+                });
             }
         }
-        return false;
     } catch (e) {
-        return false;
+        // Ignore errors
     }
+    return markerDetails;
 }
 
 // Function to recursively process all compositions
@@ -62,8 +91,8 @@ function processComposition(comp) {
     for (var i = 1; i <= comp.numLayers; i++) {
         var layer = comp.layer(i);
         
-        // Only process footage layers (not shape or solid layers)
-        if (isFootageLayer(layer)) {
+        // Only process image layers (excludes solids, nulls, adjustment layers)
+        if (isImageLayer(layer)) {
             var layerInfo = {
                 layerName: layer.name,
                 compName: comp.name,
@@ -73,9 +102,13 @@ function processComposition(comp) {
             if (!hasMarkers(layer)) {
                 // Layer has no markers
                 layersWithoutMarkers.push(layerInfo);
-            } else if (hasCompressionMarker(layer)) {
-                // Layer has compression marker
-                layersWithCompressionMarkers.push(layerInfo);
+            } else {
+                // Check for compression markers and get details
+                var compressionMarkers = getCompressionMarkerDetails(layer);
+                if (compressionMarkers.length > 0) {
+                    layerInfo.markerDetails = compressionMarkers;
+                    layersWithCompressionMarkers.push(layerInfo);
+                }
             }
         }
     }
@@ -109,12 +142,13 @@ function generateHTMLReport() {
     html += '        <h1>After Effects Layer Marker Analysis Report</h1>\n';
     html += '        <div class="summary">\n';
     html += '            <strong>Analysis Summary:</strong><br>\n';
-    html += '            • Footage layers without markers: ' + layersWithoutMarkers.length + '<br>\n';
-    html += '            • Footage layers with compression markers: ' + layersWithCompressionMarkers.length + '\n';
+    html += '            • Image layers without markers: ' + layersWithoutMarkers.length + '<br>\n';
+    html += '            • Image layers with compression markers: ' + layersWithCompressionMarkers.length + '<br>\n';
+    html += '            • <em>Note: Analysis includes only image/video layers. Excludes solid colors, null objects, adjustment layers, and shape layers.</em>\n';
     html += '        </div>\n';
     
     // Table 1: Layers without markers
-    html += '        <h2>Footage Layers Without Markers</h2>\n';
+    html += '        <h2>Image Layers Without Markers</h2>\n';
     if (layersWithoutMarkers.length > 0) {
         html += '        <table>\n';
         html += '            <thead>\n';
@@ -138,11 +172,11 @@ function generateHTMLReport() {
         html += '            </tbody>\n';
         html += '        </table>\n';
     } else {
-        html += '        <div class="no-data">No footage layers without markers found.</div>\n';
+        html += '        <div class="no-data">No image layers without markers found.</div>\n';
     }
     
     // Table 2: Layers with compression markers
-    html += '        <h2>Footage Layers With Compression Markers</h2>\n';
+    html += '        <h2>Image Layers With Compression Markers</h2>\n';
     if (layersWithCompressionMarkers.length > 0) {
         html += '        <table>\n';
         html += '            <thead>\n';
@@ -150,23 +184,50 @@ function generateHTMLReport() {
         html += '                    <th>Layer Name</th>\n';
         html += '                    <th>Composition</th>\n';
         html += '                    <th>Layer Index</th>\n';
+        html += '                    <th>Marker Time</th>\n';
+        html += '                    <th>Marker Comment</th>\n';
+        html += '                    <th>Duration</th>\n';
+        html += '                    <th>Additional Info</th>\n';
         html += '                </tr>\n';
         html += '            </thead>\n';
         html += '            <tbody>\n';
         
         for (var i = 0; i < layersWithCompressionMarkers.length; i++) {
             var layer = layersWithCompressionMarkers[i];
-            html += '                <tr>\n';
-            html += '                    <td>' + escapeHtml(layer.layerName) + '</td>\n';
-            html += '                    <td>' + escapeHtml(layer.compName) + '</td>\n';
-            html += '                    <td>' + layer.layerIndex + '</td>\n';
-            html += '                </tr>\n';
+            var markerCount = layer.markerDetails.length;
+            
+            for (var j = 0; j < markerCount; j++) {
+                var marker = layer.markerDetails[j];
+                var timeString = formatTime(marker.time);
+                var durationString = marker.duration > 0 ? formatTime(marker.duration) : "-";
+                
+                // Build additional info string
+                var additionalInfo = [];
+                if (marker.chapter) additionalInfo.push("Chapter: " + marker.chapter);
+                if (marker.url) additionalInfo.push("URL: " + marker.url);
+                if (marker.frameTarget) additionalInfo.push("Frame Target: " + marker.frameTarget);
+                if (marker.cuePointName) additionalInfo.push("Cue Point: " + marker.cuePointName);
+                var additionalInfoString = additionalInfo.length > 0 ? additionalInfo.join("<br>") : "-";
+                
+                html += '                <tr>\n';
+                // Only show layer info on first marker row for this layer
+                if (j === 0) {
+                    html += '                    <td rowspan="' + markerCount + '">' + escapeHtml(layer.layerName) + '</td>\n';
+                    html += '                    <td rowspan="' + markerCount + '">' + escapeHtml(layer.compName) + '</td>\n';
+                    html += '                    <td rowspan="' + markerCount + '">' + layer.layerIndex + '</td>\n';
+                }
+                html += '                    <td>' + timeString + '</td>\n';
+                html += '                    <td>' + escapeHtml(marker.comment) + '</td>\n';
+                html += '                    <td>' + durationString + '</td>\n';
+                html += '                    <td>' + additionalInfoString + '</td>\n';
+                html += '                </tr>\n';
+            }
         }
         
         html += '            </tbody>\n';
         html += '        </table>\n';
     } else {
-        html += '        <div class="no-data">No footage layers with compression markers found.</div>\n';
+        html += '        <div class="no-data">No image layers with compression markers found.</div>\n';
     }
     
     html += '        <div class="timestamp">Report generated on: ' + new Date().toString() + '</div>\n';
@@ -177,11 +238,36 @@ function generateHTMLReport() {
     return html;
 }
 
+// Function to format time in seconds to readable format
+function formatTime(timeInSeconds) {
+    var hours = Math.floor(timeInSeconds / 3600);
+    var minutes = Math.floor((timeInSeconds % 3600) / 60);
+    var seconds = Math.floor(timeInSeconds % 60);
+    var frames = Math.round((timeInSeconds % 1) * 30); // Assuming 30fps, adjust as needed
+    
+    var timeString = "";
+    if (hours > 0) {
+        timeString += hours + ":";
+    }
+    timeString += (minutes < 10 ? "0" : "") + minutes + ":";
+    timeString += (seconds < 10 ? "0" : "") + seconds;
+    if (frames > 0) {
+        timeString += ":" + (frames < 10 ? "0" : "") + frames;
+    }
+    
+    return timeString;
+}
+
 // Function to escape HTML characters
 function escapeHtml(text) {
-    var div = document.createElement('div');
-    div.appendChild(document.createTextNode(text));
-    return div.innerHTML;
+    if (typeof text !== 'string') {
+        return '';
+    }
+    return text.replace(/&/g, '&amp;')
+              .replace(/</g, '&lt;')
+              .replace(/>/g, '&gt;')
+              .replace(/"/g, '&quot;')
+              .replace(/'/g, '&#39;');
 }
 
 // Function to save HTML file
@@ -193,8 +279,8 @@ function saveHTMLFile(htmlContent) {
         outputFile.close();
         
         alert("Report saved successfully!\n\nFiles analyzed:\n" + 
-              "• Footage layers without markers: " + layersWithoutMarkers.length + "\n" +
-              "• Footage layers with compression markers: " + layersWithCompressionMarkers.length + "\n\n" +
+              "• Image layers without markers: " + layersWithoutMarkers.length + "\n" +
+              "• Image layers with compression markers: " + layersWithCompressionMarkers.length + "\n\n" +
               "Report saved to: " + outputFile.fsName);
     }
 }
@@ -218,6 +304,6 @@ try {
 } finally {
     app.endUndoGroup();
 }
-```
+
 
 })();
