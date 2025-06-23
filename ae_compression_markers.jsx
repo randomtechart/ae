@@ -22,7 +22,8 @@ function isImageLayer(layer) {
     // Must be an AVLayer with a valid source
     if (!(layer instanceof AVLayer) || !layer.source) {
         return false;
-    }
+// Function to add compression marker to layer
+function addCompressionMarker(layerInfo, customText) {
     
     // Exclude solid sources
     if (layer.source instanceof SolidSource) {
@@ -117,8 +118,32 @@ function processComposition(comp) {
     }
 }
 
-// Function to add compression marker to layer
-function addCompressionMarker(layerInfo, customText) {
+// Function to select layer in its composition
+function selectLayerInComp(layerInfo) {
+    try {
+        // Set the composition as active
+        app.project.activeItem = layerInfo.comp;
+        
+        // Deselect all layers first
+        for (var i = 1; i <= layerInfo.comp.numLayers; i++) {
+            layerInfo.comp.layer(i).selected = false;
+        }
+        
+        // Select the target layer
+        layerInfo.layer.selected = true;
+        
+        // Bring the composition viewer to front
+        layerInfo.comp.openInViewer();
+        
+        // Update status
+        statusText.text = "Selected layer: " + layerInfo.layerName + " in " + layerInfo.compName;
+        
+        return true;
+    } catch (error) {
+        alert("Error selecting layer: " + error.toString());
+        return false;
+    }
+}
     try {
         app.beginUndoGroup("Add Compression Marker");
         
@@ -179,17 +204,18 @@ function createUI() {
     tab1.orientation = "column";
     tab1.alignChildren = "fill";
     
-    var scrollGroup1 = tab1.add("group");
-    scrollGroup1.orientation = "column";
-    scrollGroup1.alignChildren = "fill";
-    scrollGroup1.spacing = 2;
-    
-    var panel1 = scrollGroup1.add("panel");
+    var panel1 = tab1.add("panel");
     panel1.orientation = "column";
     panel1.alignChildren = "fill";
     panel1.preferredSize.height = 350;
     
-    listGroup = panel1.add("group");
+    var scrollGroup1 = panel1.add("scrollinggroup");
+    scrollGroup1.orientation = "column";
+    scrollGroup1.alignChildren = "fill";
+    scrollGroup1.spacing = 2;
+    scrollGroup1.preferredSize.height = 330;
+    
+    listGroup = scrollGroup1.add("group");
     listGroup.orientation = "column";
     listGroup.alignChildren = "fill";
     listGroup.spacing = 5;
@@ -199,17 +225,18 @@ function createUI() {
     tab2.orientation = "column";
     tab2.alignChildren = "fill";
     
-    var scrollGroup2 = tab2.add("group");
-    scrollGroup2.orientation = "column";
-    scrollGroup2.alignChildren = "fill";
-    scrollGroup2.spacing = 2;
-    
-    var panel2 = scrollGroup2.add("panel");
+    var panel2 = tab2.add("panel");
     panel2.orientation = "column";
     panel2.alignChildren = "fill";
     panel2.preferredSize.height = 350;
     
-    var compressionListGroup = panel2.add("group");
+    var scrollGroup2 = panel2.add("scrollinggroup");
+    scrollGroup2.orientation = "column";
+    scrollGroup2.alignChildren = "fill";
+    scrollGroup2.spacing = 2;
+    scrollGroup2.preferredSize.height = 330;
+    
+    var compressionListGroup = scrollGroup2.add("group");
     compressionListGroup.orientation = "column";
     compressionListGroup.alignChildren = "fill";
     compressionListGroup.spacing = 5;
@@ -247,7 +274,7 @@ function createLayerItem(parent, layerInfo, hasMarkers) {
     var infoGroup = mainRow.add("group");
     infoGroup.orientation = "column";
     infoGroup.alignChildren = "left";
-    infoGroup.preferredSize.width = 300;
+    infoGroup.preferredSize.width = 250;
     
     var layerNameText = infoGroup.add("statictext", undefined, "Layer: " + layerInfo.layerName);
     layerNameText.graphics.font = ScriptUI.newFont("Arial", "BOLD", 12);
@@ -255,13 +282,20 @@ function createLayerItem(parent, layerInfo, hasMarkers) {
     var compNameText = infoGroup.add("statictext", undefined, "Comp: " + layerInfo.compName);
     compNameText.graphics.font = ScriptUI.newFont("Arial", "REGULAR", 10);
     
+    // Select button (always present)
+    var selectBtn = mainRow.add("button", undefined, "Select");
+    selectBtn.preferredSize.width = 50;
+    selectBtn.onClick = function() {
+        selectLayerInComp(layerInfo);
+    };
+    
     if (!hasMarkers) {
         // Text input and fix button for layers without markers
         var textInput = mainRow.add("edittext", undefined, "compression = true");
-        textInput.preferredSize.width = 150;
+        textInput.preferredSize.width = 120;
         
         var fixBtn = mainRow.add("button", undefined, "Fix It");
-        fixBtn.preferredSize.width = 60;
+        fixBtn.preferredSize.width = 50;
         
         fixBtn.onClick = function() {
             if (addCompressionMarker(layerInfo, textInput.text)) {
@@ -274,12 +308,16 @@ function createLayerItem(parent, layerInfo, hasMarkers) {
         };
     } else {
         // Show existing markers
+        var markerGroup = mainRow.add("group");
+        markerGroup.orientation = "column";
+        markerGroup.alignChildren = "left";
+        markerGroup.preferredSize.width = 180;
+        
         if (layerInfo.markerDetails) {
             for (var i = 0; i < layerInfo.markerDetails.length; i++) {
                 var marker = layerInfo.markerDetails[i];
-                var markerText = mainRow.add("statictext", undefined, "Marker: " + marker.comment);
+                var markerText = markerGroup.add("statictext", undefined, "Marker: " + marker.comment);
                 markerText.graphics.font = ScriptUI.newFont("Arial", "ITALIC", 10);
-                markerText.preferredSize.width = 200;
             }
         }
     }
