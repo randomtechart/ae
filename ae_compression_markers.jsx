@@ -1,9 +1,9 @@
+//
 // After Effects Script: Layer Marker Analysis UI Panel
 // Creates a dockable UI panel for managing layer markers
 
 (function() {
 
-```
 // Check if project is open
 if (!app.project) {
     alert("No project is open!");
@@ -389,6 +389,5 @@ try {
 } catch (error) {
     alert("Error creating UI: " + error.toString());
 }
-```
 
 })();
