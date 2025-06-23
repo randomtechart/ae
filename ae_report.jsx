@@ -64,7 +64,7 @@ for (var i = 1; i <= project.numItems; i++) {
         htmlContent += "            <tr>\n";
         htmlContent += "                <td>" + item.name + "</td>\n";
         htmlContent += "                <td class='dimensions'>" + item.width + " x " + item.height + "</td>\n";
-        htmlContent += "                <td class='duration'>" + formatTime(item.duration) + "</td>\n";
+        htmlContent += "                <td class='duration'>" + formatTime(item.duration, item.frameRate || 30) + "</td>\n";
         
         // File size
         var fileSize = "N/A";
@@ -101,12 +101,12 @@ for (var i = 1; i <= project.numItems; i++) {
     if (item instanceof CompItem) {
         htmlContent += "            <tr>\n";
         htmlContent += "                <td>" + item.name + "</td>\n";
-        htmlContent += "                <td class='duration'>" + formatTime(item.duration) + "</td>\n";
+        htmlContent += "                <td class='duration'>" + formatTime(item.duration, item.frameRate) + "</td>\n";
         htmlContent += "                <td class='dimensions'>" + item.width + " x " + item.height + "</td>\n";
         htmlContent += "                <td class='duration'>" + item.frameRate.toFixed(2) + " fps</td>\n";
         
         // Composition markers
-        var markersText = getMarkersText(item.markerProperty);
+        var markersText = getMarkersText(item.markerProperty, item.frameRate);
         htmlContent += "                <td class='markers'>" + markersText + "</td>\n";
         htmlContent += "            </tr>\n";
     }
@@ -134,13 +134,13 @@ for (var i = 1; i <= project.numItems; i++) {
             htmlContent += "                <td>" + layer.name + "</td>\n";
             htmlContent += "                <td class='duration'>" + layer.index + "</td>\n";
             htmlContent += "                <td>" + item.name + "</td>\n";
-            htmlContent += "                <td class='duration'>" + formatTime(layer.inPoint) + "</td>\n";
-            htmlContent += "                <td class='duration'>" + formatTime(layer.outPoint) + "</td>\n";
+            htmlContent += "                <td class='duration'>" + formatTime(layer.inPoint, item.frameRate) + "</td>\n";
+            htmlContent += "                <td class='duration'>" + formatTime(layer.outPoint, item.frameRate) + "</td>\n";
             
             // Layer markers
             var layerMarkersText = "";
             try {
-                layerMarkersText = getMarkersText(layer.property("Marker"));
+                layerMarkersText = getMarkersText(layer.property("Marker"), item.frameRate);
             } catch (e) {
                 layerMarkersText = "No markers";
             }
@@ -178,23 +178,14 @@ if (outputFile) {
 
 }
 
-// Helper function to format time in seconds to readable format
-function formatTime(timeInSeconds) {
+// Helper function to format time in seconds to frame numbers
+function formatTime(timeInSeconds, frameRate) {
 if (timeInSeconds == undefined || timeInSeconds == null) return “N/A”;
+if (!frameRate) frameRate = 30; // Default frame rate
 
 ```
-var hours = Math.floor(timeInSeconds / 3600);
-var minutes = Math.floor((timeInSeconds % 3600) / 60);
-var seconds = Math.floor(timeInSeconds % 60);
-var frames = Math.floor((timeInSeconds % 1) * 30); // Assuming 30fps for frame calculation
-
-var timeStr = "";
-if (hours > 0) timeStr += hours.toString().padStart(2, '0') + ":";
-timeStr += minutes.toString().padStart(2, '0') + ":";
-timeStr += seconds.toString().padStart(2, '0');
-if (frames > 0) timeStr += ":" + frames.toString().padStart(2, '0');
-
-return timeStr;
+var totalFrames = Math.round(timeInSeconds * frameRate);
+return totalFrames + " frames";
 ```
 
 }
@@ -209,11 +200,12 @@ return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + “ “ + sizes[i];
 }
 
 // Helper function to extract marker information
-function getMarkersText(markerProperty) {
+function getMarkersText(markerProperty, frameRate) {
 var markersText = “”;
 
 ```
 if (!markerProperty) return "No markers";
+if (!frameRate) frameRate = 30; // Default frame rate
 
 try {
     var numMarkers = markerProperty.numKeys;
@@ -223,7 +215,7 @@ try {
         var markerTime = markerProperty.keyTime(i);
         var markerValue = markerProperty.keyValue(i);
         
-        markersText += "<strong>" + formatTime(markerTime) + "</strong>: ";
+        markersText += "<strong>" + formatTime(markerTime, frameRate) + "</strong>: ";
         
         // Extract marker properties
         if (markerValue.comment) {
