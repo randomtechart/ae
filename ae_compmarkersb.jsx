@@ -24,20 +24,34 @@ function main() {
     createUI();
 }
 
+// Check if layer is an image sequence or video
+function isImageSequenceOrVideo(layer) {
+    if (!layer.source || !(layer.source instanceof FootageItem)) {
+        return false;
+    }
+    
+    var footage = layer.source;
+    // Check if it's a sequence/video (has duration > 0 and has video)
+    return footage.duration > 0 && footage.hasVideo;
+}
+
 // Recursively search through compositions
 function searchCompositionRecursively(comp) {
     // Check all layers in current composition
     for (var i = 1; i <= comp.numLayers; i++) {
         var layer = comp.layer(i);
         
-        // Check if layer has compression rate marker
-        if (!hasCompressionRateMarker(layer)) {
-            layersWithoutMarkers.push({
-                layer: layer,
-                comp: comp,
-                layerName: layer.name,
-                compName: comp.name
-            });
+        // Only process image sequence or video layers
+        if (isImageSequenceOrVideo(layer)) {
+            // Check if layer has compression rate marker
+            if (!hasCompressionRateMarker(layer)) {
+                layersWithoutMarkers.push({
+                    layer: layer,
+                    comp: comp,
+                    layerName: layer.name,
+                    compName: comp.name
+                });
+            }
         }
         
         // If layer is a composition layer, search recursively
@@ -244,6 +258,4 @@ try {
 } finally {
     app.endUndoGroup();
 }
-
-
 })();
