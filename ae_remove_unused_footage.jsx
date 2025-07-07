@@ -80,7 +80,7 @@ var headerPanel = dialog.add("panel", undefined, "Found " + unusedItems.length +
 headerPanel.alignment = "fill";
 headerPanel.margins = 10;
 
-var headerText = headerPanel.add("statictext", undefined, "Select items to remove from project or delete from disk:");
+var headerText = headerPanel.add("statictext", undefined, "Select items to remove from project or move to recycle bin:");
 headerText.alignment = "left";
 
 // Main content area
@@ -123,7 +123,7 @@ buttonGroup.alignment = "center";
 buttonGroup.spacing = 10;
 
 var removeBtn = buttonGroup.add("button", undefined, "Remove from Project");
-var deleteBtn = buttonGroup.add("button", undefined, "Delete Files from Disk");
+var deleteBtn = buttonGroup.add("button", undefined, "Move Files to Recycle Bin");
 var cancelBtn = buttonGroup.add("button", undefined, "Cancel");
 
 // Event handlers
@@ -165,27 +165,55 @@ removeBtn.onClick = function() {
     var result = confirm("Remove " + selectedItems.length + " item(s) from the project?");
     if (result) {
         removeFromProject(selectedItems);
-        dialog.close();
+        // Update the UI by removing processed items from the list
+        updateUIAfterProcessing(selectedItems);
     }
 };
 
 deleteBtn.onClick = function() {
     var selectedItems = getSelectedItems();
     if (selectedItems.length === 0) {
-        alert("Please select items to delete.");
+        alert("Please select items to move to recycle bin.");
         return;
     }
     
-    var result = confirm("WARNING: This will permanently delete " + selectedItems.length + " file(s) from your computer. This action cannot be undone!\n\nAre you sure you want to continue?");
+    var result = confirm("Move " + selectedItems.length + " file(s) to the recycle bin and remove from project?");
     if (result) {
-        deleteFiles(selectedItems);
-        dialog.close();
+        moveToRecycleBin(selectedItems);
+        // Update the UI by removing processed items from the list
+        updateUIAfterProcessing(selectedItems);
     }
 };
 
 cancelBtn.onClick = function() {
     dialog.close();
 };
+
+function updateUIAfterProcessing(processedItems) {
+    // Remove processed items from the listbox
+    for (var i = listBox.items.length - 1; i >= 0; i--) {
+        var listItem = listBox.items[i];
+        for (var j = 0; j < processedItems.length; j++) {
+            if (listItem.userData === processedItems[j]) {
+                listBox.remove(i);
+                break;
+            }
+        }
+    }
+    
+    // Update header text
+    headerText.text = "Found " + listBox.items.length + " unused footage item(s). Select items to remove from project or move to recycle bin:";
+    headerPanel.text = "Found " + listBox.items.length + " unused footage item(s)";
+    
+    // Update selection count
+    updateSelectedCount();
+    
+    // If no items left, show completion message
+    if (listBox.items.length === 0) {
+        alert("All unused footage has been processed!");
+        dialog.close();
+    }
+}
 
 function getSelectedItems() {
     var selected = [];
@@ -234,11 +262,11 @@ alert(message);
 
 }
 
-function deleteFiles(items) {
-app.beginUndoGroup(“Delete Unused Footage Files”);
+function moveToRecycleBin(items) {
+app.beginUndoGroup(“Move Unused Footage to Recycle Bin”);
 
 ```
-var deletedCount = 0;
+var movedCount = 0;
 var removedCount = 0;
 var errorCount = 0;
 var missingCount = 0;
@@ -248,9 +276,9 @@ for (var i = 0; i < items.length; i++) {
         var file = items[i].item.file;
         
         if (file && file.exists) {
-            // Try to delete the file
-            if (file.remove()) {
-                deletedCount++;
+            // Move file to recycle bin
+            if (moveFileToRecycleBin(file)) {
+                movedCount++;
             } else {
                 errorCount++;
             }
@@ -270,7 +298,7 @@ for (var i = 0; i < items.length; i++) {
 app.endUndoGroup();
 
 var message = "Results:\n";
-message += "- Files deleted: " + deletedCount + "\n";
+message += "- Files moved to recycle bin: " + movedCount + "\n";
 message += "- Items removed from project: " + removedCount + "\n";
 
 if (missingCount > 0) {
@@ -282,6 +310,38 @@ if (errorCount > 0) {
 }
 
 alert(message);
+```
+
+}
+
+function moveFileToRecycleBin(file) {
+try {
+// For Windows
+if ($.os.indexOf(“Windows”) >= 0) {
+var batch = new File(Folder.temp + “/move_to_recycle.bat”);
+batch.open(“w”);
+batch.writeln(”@echo off”);
+batch.writeln(“powershell -Command "Add-Type -AssemblyName Microsoft.VisualBasic; [Microsoft.VisualBasic.FileIO.FileSystem]::DeleteFile(’” + file.fsName.replace(/\/g, “\\”) + “’, ‘OnlyErrorDialogs’, ‘SendToRecycleBin’)"”);
+batch.close();
+
+```
+        return batch.execute();
+    }
+    // For Mac
+    else if ($.os.indexOf("Mac") >= 0) {
+        var script = 'tell application "Finder" to move (POSIX file "' + file.fsName + '") to trash';
+        var osascript = new File("/usr/bin/osascript");
+        if (osascript.exists) {
+            return system('osascript -e \'' + script + '\'') === 0;
+        }
+    }
+    
+    // Fallback - regular delete if recycle bin method fails
+    return file.remove();
+    
+} catch (e) {
+    return false;
+}
 ```
 
 }
